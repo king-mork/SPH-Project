@@ -5,3 +5,5 @@
 !/Assets/
 !/ProjectSettings/
 *.log
+*.dwlt
+*.dll
