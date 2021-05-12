@@ -1,0 +1,171 @@
+﻿#include "SPHobjects.compute"
+
+//Kernels
+#pragma kernel calcDensityPressure
+#pragma kernel calcForce
+#pragma kernel moveParticles
+
+//Buffers
+RWStructuredBuffer<Particle> particleBuffer;
+RWStructuredBuffer<CupCollider> colliderBuffer;
+
+    // Update is called once per frame
+    void FixedUpdate()
+    {
+        float dt = Time.fixedDeltaTime;
+        shader.SetFloat("dt", dt);
+
+        //Spawn particles if any remain
+        if(pNumActive < pNum){
+            initParticles();
+        }
+
+        //Calculate density and pressure for each particle
+        for(int i = 0; i < pNumActive; i++){
+            calcDensityPressure(i);
+        }
+        //Calculate total force acting on each particle
+        for(int i = 0; i < pNumActive; i++){
+            Vector3 Fg = Vector3.zero, Fp = Vector3.zero, Fv = Vector3.zero;
+
+            //Calculate force of gravity
+            //CALL SHADER
+            Fg = GRAV * g * particles[i].getDensity();
+            //Calculate force of each neighboring particle
+            for(int j = 0; j < pNumActive; j++){
+                if(i == j)
+                    continue;
+
+                //Distance and direction                
+                Vector3 dir = particles[j].getPosition() - particles[i].getPosition();
+                float dist = dir.magnitude; 
+
+                //Calculate force of pressure
+                Fp += forcePressure(i, j, dir, dist);
+                //Calculate viscocity force
+                Fv += forceViscocity(i, j, dir, dist);
+            }
+            
+            //Calculate total force on particle
+            Vector3 Ftotal = Fp + Fg + Fv;
+            //Set total force acting on particle
+            particles[i].setForce(Ftotal);
+        }
+        
+        //Set new positions
+        moveParticles(dt);
+    }
+
+    private void calcDensityPressure(int i){     //**Calculates density and pressure of a given particle
+        //Calc Density
+        float density = 0.0f;
+        for(int j = 0; j < pNumActive; j++){
+            if(i == j)
+                continue;
+            //#####CALL SHADER
+            Vector3 dir = particles[j].getPosition() - particles[i].getPosition();
+            float dist = dir.magnitude;
+
+            //Poly6 kernel
+            if(dist < smoothRad){
+                density += m * (315.0f / (64.0f * Mathf.PI * Mathf.Pow(smoothRad, 9.0f))) * Mathf.Pow(smoothRad - dist, 3.0f);
+            }
+        }
+        particles[i].setDensity(Mathf.Max(density, restDensity));
+        //Calc pressure
+        particles[i].setPressure(GAS*(particles[i].getDensity()-restDensity));
+    }
+
+    private Vector3 forcePressure(int i, int j, Vector3 dir, float dist){    //**Calculates force of pressure
+        Vector3 Fp = Vector3.zero;
+        Vector3 dirUnit = dir.normalized;
+        
+        //Spikey gradient
+        if(dist < smoothRad){
+            Fp += -1.0f * dirUnit * m * (particles[i].getPressure() + particles[j].getPressure()) / (2.0f * particles[j].getDensity()) 
+            * (-45.0f / (Mathf.PI * Mathf.Pow(smoothRad, 6.0f))) * Mathf.Pow(smoothRad - dist, 2.0f);
+        }
+
+        return Fp;
+    }
+
+    private Vector3 forceViscocity(int i, int j, Vector3 dir, float dist){  //**Calculates force of viscocity
+        Vector3 Fv = Vector3.zero;
+        
+        //Viscosity Laplacian
+        if(dist < smoothRad){
+            Fv += VISC * m * (particles[i].getVelocity() - particles[j].getVelocity()) 
+            / particles[j].getDensity() * (45.0f / (Mathf.PI * Mathf.Pow(smoothRad, 6.0f))) * (smoothRad - dist);
+        }
+
+        return Fv;
+    }
+
+    private void moveParticles(float dt){   //**Derives the velocity and position of each particle
+
+        for(int i = 0; i < pNumActive; i++){
+            Particle p = particles[i];
+            //Get initial position and velocity
+            Vector3 iVel = p.getVelocity(), iPos = p.getPosition();
+            Vector3 vel, pos;
+            
+            //Interpolate velocity
+            //Newton's 2nd Law (acceleration)
+            Vector3 a = p.getForce()/p.getDensity();
+            //Calc velocity
+            vel = iVel + (a * dt);
+            
+            //Check for collision against every collider
+            for(int j = 0; j < cNum; j++){
+                Vector3 cNormal;
+                if( isColliding(iPos, vel, colliders[j], out cNormal, dt) ){
+                    //Resolve collision velocity
+                    vel = resolveCollision(colliders[j], vel, cNormal);
+                    //Penalty
+                    iPos += (0.03f * cNormal);
+                }
+            }
+            
+            //Calc position
+            pos = iPos + (vel * dt);
+
+            //Set vel and pos in particle
+            p.setVelocity(vel);
+            p.setPosition(pos);
+        }
+
+    }
+
+//Collision Detection and Resolution
+bool isColliding(float3 pos, float3 vel, CupCollider col, out float3 cNormal, float dt){
+
+        float3 cPos = col.pos;
+        //Get normal
+        cNormal = col.up;
+        //x-p
+        float3 tmp1 = pos - cPos;
+        //dot((x-p), n)
+        double dist = abs(dot(tmp1, cNormal));
+        //Get distance of next position
+        float3 posNext = pos + (vel * dt);
+        float3 tmp2 = posNext - cPos;
+        double distNext = abs(dot(tmp2, cNormal));
+        //Check if close to collider and moving toward it
+        if(dist - (r/2.0f) < 0.0f && distNext < dist){
+            //Debug.Log("COLLISION");
+            return true;
+        }
+
+        return false;
+}
+
+float3 resolveCollision(CupCollider col, float3 vel, float3 cNormal){
+        
+        float3 adj = cross(col.up, col.right);
+
+        float3 nVel = (ks * dot(vel, cNormal) * cNormal) 
+        + ((1.0f - kd) * dot(vel, col.right) * col.right)
+        + ((1.0f - kd) * dot(vel, adj) * adj);
+
+        return nVel;
+}

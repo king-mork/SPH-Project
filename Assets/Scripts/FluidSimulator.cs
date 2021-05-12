@@ -28,10 +28,45 @@ public class FluidSimulator : MonoBehaviour
     public float smoothRad; //Smoothing Radius
     public bool move;
 
+    //Compute Shader
+    private ComputeShader shader;
+    private ComputeBuffer bufferParticles;
+    private ComputeBuffer bufferColliders;
+    //Shader Kernels
+    private int kernelInitCollider
+    private int kernelUpdateCollider
+    private int kernelCalcDensityPressure
+    private int kernelCalcForce
+    private int kernelMoveParticles
+
 
     void Awake(){
         cup = GameObject.Find("Cup");
         pNumActive = 0;
+
+        //Instantiate shader
+        shader = (ComputeShader)Instantiate(Resouces.Load("SPHcalc.compute"));
+        //Find kernels
+        kernelCalcDensityPressure = shader.FindKernel("calcDensityPressure");
+        kernelCalcForce = shader.FindKernel("calcForce");
+        kernelMoveParticles = shader.FindKernel("moveParticles");
+
+        //Set Shader constants
+        shader.SetInt("pNum", pNum);
+        shader.SetInt("cNum", cNum);
+        shader.SetFloat3("g", g);
+        shader.SetFloat("r", r);
+        shader.SetFloat("m", m);
+        shader.SetFloat("ks", ks);
+        shader.SetFloat("kd", kd);
+        shader.SetFloat("smoothRad", smoothRad);
+        shader.SetBool("move", move);
+        //Set Shader variables
+        shader.SetInt("pNumActive", pNumActive);
+
+        //Instantiate buffers
+        bufferParticles = new ComputeBuffer(pNum, Particle.stride);
+        bufferColliders = new ComputeBuffer(cNum, CupCollider.stride);
     }
 
     // Start is called before the first frame update
@@ -47,27 +82,26 @@ public class FluidSimulator : MonoBehaviour
     private void initParticles(){   //**Create and initialize particles
         //Get particle prefab
         GameObject particle_prefab;
-        //Create particle array
-        //particles = new Particle[pNum];
 
-        //for(int i = 0; i < pNum; i++){
-            //Instantiate particle object
-            particle_prefab = (GameObject)Resources.Load("Water_Particle");
-            GameObject go  = Instantiate(particle_prefab);
-            particles[pNumActive] = go.AddComponent<Particle>();
-            particles[pNumActive].setObject(go);
+        //Instantiate particle object
+        particle_prefab = (GameObject)Resources.Load("Water_Particle");
+        GameObject go  = Instantiate(particle_prefab);
+        particles[pNumActive] = go.AddComponent<Particle>();
+        particles[pNumActive].setObject(go);
 
-            //Generate start position
-            float x = Random.Range(-0.5f, 0.5f);
-            float z = Random.Range(-0.5f, 0.5f);
-            Vector3 p0 = new Vector3(x, 1.5f, z);
+        //Generate start position
+        float x = Random.Range(-0.5f, 0.5f);
+        float z = Random.Range(-0.5f, 0.5f);
+        Vector3 p0 = new Vector3(x, 1.5f, z);
 
-            //Scale object
-            particles[pNumActive].setRadius(r);
-            //Translate object to start position
-            particles[pNumActive].setPosition(p0);
-        //}
+        //Scale object
+        particles[pNumActive].setRadius(r);
+        //Translate object to start position
+        particles[pNumActive].setPosition(p0);
+
+        //Increment number of active particles
         pNumActive++;
+        shader.SetInt("pNumActive", pNumActive);
     }
 
     
@@ -107,13 +141,21 @@ public class FluidSimulator : MonoBehaviour
         float dt = Time.fixedDeltaTime;
 
         //Rotate Cup
-        if(move && Time.time > 3.0f)
+        if(move && Time.time > 3.0f){
             updateColliders();
-
+        }
+            
         //Spawn particles if any remain
         if(pNumActive < pNum){
             initParticles();
         }
+
+        //Set buffer data
+        bufferParticles.SetData(particles);
+        bufferColliders.SetData(colliders);
+
+        //Dispatch shader
+        shader.Dispatch(kernelCalcDensityPressure, , 1, 1)
 
         //Calculate density and pressure for each particle
         for(int i = 0; i < pNumActive; i++){
@@ -124,6 +166,7 @@ public class FluidSimulator : MonoBehaviour
             Vector3 Fg = Vector3.zero, Fp = Vector3.zero, Fv = Vector3.zero;
 
             //Calculate force of gravity
+            //CALL SHADER
             Fg = GRAV * g * particles[i].getDensity();
             //Calculate force of each neighboring particle
             for(int j = 0; j < pNumActive; j++){
@@ -156,6 +199,7 @@ public class FluidSimulator : MonoBehaviour
         for(int j = 0; j < pNumActive; j++){
             if(i == j)
                 continue;
+            //#####CALL SHADER
             Vector3 dir = particles[j].getPosition() - particles[i].getPosition();
             float dist = dir.magnitude;
 
@@ -264,4 +308,13 @@ public class FluidSimulator : MonoBehaviour
         return nVel;
     }
 
+
+    void OnApplicationQuit(){
+        //Free memory buffers
+        bufferParticles.Release();
+        bufferParticles = null;
+
+        bufferColliders.Release();
+        bufferColliders = null;
+    }
 }

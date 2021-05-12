@@ -1,0 +1,37 @@
+﻿#define THREAD_COUNT 8
+
+struct Particle{
+    float radius;        //Radius of particle
+    float3 position;    //Current position
+    float3 velocity;    //Current velocity
+    float density;    //Density
+    float pressure;    //Pressure
+    float3 force;  //Total force acting on particle
+}
+
+struct CupCollider{
+    float3 position;
+    float3 right;
+    float3 up;
+    float3 scale;
+}
+
+//Simulation Constants
+uniform int pNum;   //Number of particles in sim
+uniform int cNum;   //Number of collision surfaces in sim
+uniform float3 g;   //Gravity
+uniform float r;     //Particle radius
+uniform float m;     //Particle mass
+uniform float ks;    //Spring coefficient
+uniform float kd;    //Drag coefficient
+uniform float smoothRad; //Smoothing Radius
+uniform bool move;
+
+//SPH Constants
+#define float GAS = -40.0f;
+#define float GRAV = 1.0f;
+#define float VISC = 1.0f;
+
+//Simulation Variables
+int pNumActive;     //Number of active particles
+float dt;           //Time step

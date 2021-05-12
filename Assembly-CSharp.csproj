@@ -39,6 +39,8 @@
      <Compile Include="Assets\Scripts\CupCollider.cs" />
      <Compile Include="Assets\Scripts\FluidSimulator.cs" />
      <Compile Include="Assets\Scripts\Particle.cs" />
+     <None Include="Assets\Shaders\SPHobjects.compute" />
+     <None Include="Assets\Shaders\SPHcalc.compute" />
     <Reference Include="UnityEngine">
         <HintPath>D:/Program Files/2019.3.12f1/Editor/Data/Managed/UnityEngine/UnityEngine.dll</HintPath>
     </Reference>
