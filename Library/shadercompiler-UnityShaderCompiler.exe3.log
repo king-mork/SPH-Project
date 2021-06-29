@@ -1,7 +1,0 @@
-Base path: 'D:/Program Files/2019.3.12f1/Editor/Data', plugins path 'D:/Program Files/2019.3.12f1/Editor/Data/PlaybackEngines'
-Cmd: initializeCompiler
-Cmd: compileComputeKernel
-  error: 2 plat 4 at SPHobjects.compute(5): unrecognized identifier 'Vector3'
-  error: 1 plat 4 at SPHobjects.compute(21): 'float' : macro redefinition
-  error: 1 plat 4 at SPHobjects.compute(22): 'float' : macro redefinition
-  api=4 insize=343 outsize=0 ok=0
