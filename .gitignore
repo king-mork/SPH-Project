@@ -4,9 +4,4 @@
 !.gitignore
 !/Assets/
 !/ProjectSettings/
-Library/ArtifactDB
-Library/shadercompiler-UnityShaderCompiler.exe0.log
-Library/shadercompiler-UnityShaderCompiler.exe1.log
-Library/shadercompiler-UnityShaderCompiler.exe2.log
-Library/SourceAssetDB
 *.log
